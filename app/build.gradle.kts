@@ -5,13 +5,13 @@ plugins {
 }
 
 android {
-    namespace = "com.example.greetingcard"
+    namespace = "com.fletcher.peace"
     compileSdk {
         version = release(36)
     }
 
     defaultConfig {
-        applicationId = "com.example.greetingcard"
+        applicationId = "com.fletcher.peace"
         minSdk = 24
         targetSdk = 36
         versionCode = 1
@@ -61,5 +61,4 @@ dependencies {
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
     implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.9.4")
-// Use the latest stable version
 }

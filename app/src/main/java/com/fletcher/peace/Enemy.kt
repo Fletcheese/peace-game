@@ -1,4 +1,4 @@
-package com.example.greetingcard.ui.games
+package com.fletcher.peace
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.fillMaxSize

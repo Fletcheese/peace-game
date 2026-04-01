@@ -1,4 +1,4 @@
-package com.example.greetingcard.ui.games
+package com.fletcher.peace
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.fillMaxSize
@@ -7,7 +7,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.IntSize
 import kotlin.math.*
 import kotlin.random.Random
@@ -24,8 +23,7 @@ class Gate(
     private var time = Random.nextFloat() * 100f
 
     fun update() {
-        time += 0.01f // Slow speed
-        // Vaguely random drifting pattern using Sine/Cosine
+        time += 0.01f
         val driftX = sin(time) * 30f
         val driftY = cos(time * 0.8f) * 30f
         val drift = Offset(driftX, driftY)
@@ -37,9 +35,8 @@ class Gate(
     @Composable
     fun Draw() {
         Canvas(modifier = Modifier.fillMaxSize()) {
-            val gateColor = Color(0xFFFFA500) // Orange
+            val gateColor = Color(0xFFFFA500)
 
-            // 1. Draw White Outline (slightly thicker)
             drawLine(
                 Color.White, currentStart, currentEnd,
                 strokeWidth = 10f, cap = StrokeCap.Round, alpha = 0.6f
@@ -47,7 +44,6 @@ class Gate(
             drawCircle(Color.White, endRadius + 4f, currentStart, alpha = 0.6f)
             drawCircle(Color.White, endRadius + 4f, currentEnd, alpha = 0.6f)
 
-            // 2. Draw Orange Gate
             drawLine(gateColor, currentStart, currentEnd, strokeWidth = 5f, cap = StrokeCap.Round)
             drawCircle(gateColor, endRadius, currentStart)
             drawCircle(gateColor, endRadius, currentEnd)
@@ -61,35 +57,32 @@ class Gate(
     }
 
     fun checkForActivation(playerPos: Offset, playerRadius: Float): Boolean {
-        // Simple distance check to the line (approximate)
         return didLineCrossCircle(currentStart, currentEnd, playerPos, playerRadius)
     }
 }
-// --- Gate Constants ---
+
 private const val GATE_LENGTH = 250f
 
-/**
- * Creates a gate with a fixed length at a random position and orientation.
- */
 fun createRandomGate(screenSize: IntSize, padding: Float): Gate {
-    // 1. Pick a random starting point
-    val start = createRandomOffset(screenSize, padding)
-
-    // 2. Pick a random angle
+    val totalPadding = padding + 50f // Extra padding to account for drift
+    
+    // 1. Pick a random angle first
     val angle = Random.nextFloat() * 2 * PI.toFloat()
+    val dx = cos(angle) * GATE_LENGTH
+    val dy = sin(angle) * GATE_LENGTH
 
-    // 3. Calculate the end point based on length
-    val endX = start.x + cos(angle) * GATE_LENGTH
-    val endY = start.y + sin(angle) * GATE_LENGTH
+    // 2. Pick a start point such that the end point is also within bounds
+    val minX = max(totalPadding, totalPadding - dx)
+    val maxX = min(screenSize.width - totalPadding, screenSize.width - totalPadding - dx)
+    val minY = max(totalPadding, totalPadding - dy)
+    val maxY = min(screenSize.height - totalPadding, screenSize.height - totalPadding - dy)
 
-    val end = Offset(endX, endY).let {
-        Offset(
-            it.x.coerceIn(padding, screenSize.width - padding),
-            it.y.coerceIn(padding, screenSize.height - padding)
-        )
-    }
+    val startX = if (maxX > minX) Random.nextFloat() * (maxX - minX) + minX else screenSize.width / 2f
+    val startY = if (maxY > minY) Random.nextFloat() * (maxY - minY) + minY else screenSize.height / 2f
+    
+    val start = Offset(startX, startY)
+    val end = Offset(startX + dx, startY + dy)
 
-    // Return the new Gate using the anchor coordinates for drifting
     return Gate(
         id = System.currentTimeMillis(),
         anchorStart = start,
@@ -97,13 +90,24 @@ fun createRandomGate(screenSize: IntSize, padding: Float): Gate {
     )
 }
 
-/**
- * Shared helper to generate random coordinates within screen bounds
- */
-fun createRandomOffset(screenSize: IntSize, padding: Float): Offset {
-    if (screenSize.width == 0 || screenSize.height == 0) return Offset.Zero
-    return Offset(
-        x = Random.nextFloat() * (screenSize.width - 2 * padding) + padding,
-        y = Random.nextFloat() * (screenSize.height - 2 * padding) + padding
-    )
+private fun didLineCrossCircle(
+    lineStart: Offset,
+    lineEnd: Offset,
+    circleCenter: Offset,
+    circleRadius: Float
+): Boolean {
+    val dx = lineEnd.x - lineStart.x
+    val dy = lineEnd.y - lineStart.y
+
+    val lineLengthSq = dx * dx + dy * dy
+    if (lineLengthSq == 0f) return false
+
+    val t = ((circleCenter.x - lineStart.x) * dx + (circleCenter.y - lineStart.y) * dy) / lineLengthSq
+    val constrainedT = t.coerceIn(0f, 1f)
+
+    val closestX = lineStart.x + constrainedT * dx
+    val closestY = lineStart.y + constrainedT * dy
+
+    val distanceSq = (circleCenter.x - closestX).pow(2) + (circleCenter.y - closestY).pow(2)
+    return distanceSq <= circleRadius.pow(2)
 }
