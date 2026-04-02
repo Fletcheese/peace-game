@@ -1,7 +1,6 @@
 package com.fletcher.peace
 
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.VectorConverter
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
@@ -17,7 +16,7 @@ import androidx.compose.ui.graphics.drawscope.rotate
 import kotlinx.coroutines.CoroutineScope
 
 // --- Player Constants ---
-const val PLAYER_CIRCLE_RADIUS = 25f
+const val PLAYER_CIRCLE_RADIUS = 37.5f // Increased 1.5x from 25f
 
 // --- Player Class ---
 class GamePlayer(
@@ -27,9 +26,6 @@ class GamePlayer(
     val position = Animatable(initialPosition, Offset.VectorConverter)
     var rotation by mutableFloatStateOf(0f)
 
-    /**
-     * Instantly moves the player to a new position.
-     */
     suspend fun snapTo(offset: Offset) {
         position.snapTo(offset)
     }
@@ -43,17 +39,39 @@ class GamePlayer(
         }
     }
 
-    /**
-     * Composable function for the Player to draw itself as a rotating rainbow peace sign.
-     */
     @Composable
     fun Draw() {
+        val infiniteTransition = rememberInfiniteTransition(label = "playerGlow")
+        val pulseScale by infiniteTransition.animateFloat(
+            initialValue = 1.0f,
+            targetValue = 1.4f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(1500, easing = FastOutSlowInEasing),
+                repeatMode = RepeatMode.Reverse
+            ),
+            label = "pulse"
+        )
+
         Canvas(modifier = Modifier.fillMaxSize()) {
             val center = position.value
             val radius = PLAYER_CIRCLE_RADIUS
             
+            // Pulsing Rainbow Glow
+            drawCircle(
+                brush = Brush.radialGradient(
+                    colors = listOf(
+                        Color.Cyan.copy(alpha = 0.4f),
+                        Color.Magenta.copy(alpha = 0.2f),
+                        Color.Transparent
+                    ),
+                    center = center,
+                    radius = radius * 3f * pulseScale
+                ),
+                radius = radius * 3f * pulseScale,
+                center = center
+            )
+
             rotate(rotation, center) {
-                // Rainbow gradient for the peace sign
                 val rainbowBrush = Brush.sweepGradient(
                     colors = listOf(
                         Color.Red, Color.Magenta, Color.Blue, 
@@ -62,23 +80,20 @@ class GamePlayer(
                     center = center
                 )
 
-                // 1. Draw the outer circle
                 drawCircle(
                     brush = rainbowBrush,
                     radius = radius,
                     center = center,
-                    style = Stroke(width = 4f)
+                    style = Stroke(width = 6f)
                 )
 
-                // 2. Draw the vertical line
                 drawLine(
                     brush = rainbowBrush,
                     start = Offset(center.x, center.y - radius),
                     end = Offset(center.x, center.y + radius),
-                    strokeWidth = 4f
+                    strokeWidth = 6f
                 )
 
-                // 3. Draw the angled lines
                 val cos45 = 0.707f
                 val sin45 = 0.707f
 
@@ -86,13 +101,13 @@ class GamePlayer(
                     brush = rainbowBrush,
                     start = center,
                     end = Offset(center.x - radius * cos45, center.y + radius * sin45),
-                    strokeWidth = 4f
+                    strokeWidth = 6f
                 )
                 drawLine(
                     brush = rainbowBrush,
                     start = center,
                     end = Offset(center.x + radius * cos45, center.y + radius * sin45),
-                    strokeWidth = 4f
+                    strokeWidth = 6f
                 )
             }
         }

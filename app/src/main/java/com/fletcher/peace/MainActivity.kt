@@ -6,14 +6,16 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.core.*
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -68,6 +70,9 @@ fun HomeScreen(navController: NavController, modifier: Modifier = Modifier) {
     val scoreManager = remember { ScoreManager(context) }
     val highScores = remember { scoreManager.getHighScores() }
     val lastGame = remember { scoreManager.getLastScore() }
+    
+    var showSettings by remember { mutableStateOf(false) }
+    var shipSpeed by remember { mutableStateOf(scoreManager.getShipSpeed()) }
 
     Box(
         modifier = modifier
@@ -76,14 +81,23 @@ fun HomeScreen(navController: NavController, modifier: Modifier = Modifier) {
     ) {
         SpaceBackground()
 
-        // Shared text styles for consistency
+        // Settings Gear Icon
+        IconButton(
+            onClick = { showSettings = true },
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(16.dp)
+        ) {
+            Text("⚙", color = Color.White, fontSize = 32.sp) // Gear symbol
+        }
+
         val labelStyle = TextStyle(
             color = Color.White.copy(alpha = 0.7f),
             fontSize = 14.sp,
             fontWeight = FontWeight.Bold,
             letterSpacing = 2.sp
         )
-        val scoreValueStyle = TextStyle(
+        val valueStyle = TextStyle(
             color = Color.White.copy(alpha = 0.5f),
             fontSize = 16.sp,
             fontWeight = FontWeight.Medium
@@ -92,13 +106,9 @@ fun HomeScreen(navController: NavController, modifier: Modifier = Modifier) {
         // Last Game Score Section
         if (lastGame != null) {
             val lastGameModifier = if (isLandscape) {
-                Modifier
-                    .align(Alignment.CenterStart)
-                    .padding(start = 48.dp)
+                Modifier.align(Alignment.CenterStart).padding(start = 48.dp)
             } else {
-                Modifier
-                    .align(Alignment.TopCenter)
-                    .padding(top = 64.dp)
+                Modifier.align(Alignment.TopCenter).padding(top = 64.dp)
             }
             Column(
                 modifier = lastGameModifier,
@@ -108,12 +118,12 @@ fun HomeScreen(navController: NavController, modifier: Modifier = Modifier) {
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
                     text = "${lastGame.score} (x${lastGame.multiplier})",
-                    style = scoreValueStyle
+                    style = valueStyle
                 )
             }
         }
 
-        // Glowing "Tap to Start" UI
+        // Center Branding
         Column(
             modifier = Modifier.fillMaxSize(),
             verticalArrangement = Arrangement.Center,
@@ -174,16 +184,12 @@ fun HomeScreen(navController: NavController, modifier: Modifier = Modifier) {
             )
         }
 
-        // High Scores Section
+        // High Scores at bottom
         if (highScores.isNotEmpty()) {
             val highScoresModifier = if (isLandscape) {
-                Modifier
-                    .align(Alignment.CenterEnd)
-                    .padding(end = 48.dp)
+                Modifier.align(Alignment.CenterEnd).padding(end = 48.dp)
             } else {
-                Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = 48.dp)
+                Modifier.align(Alignment.BottomCenter).padding(bottom = 48.dp)
             }
             Column(
                 modifier = highScoresModifier,
@@ -194,11 +200,47 @@ fun HomeScreen(navController: NavController, modifier: Modifier = Modifier) {
                 highScores.forEachIndexed { index, gameScore ->
                     Text(
                         text = "${index + 1}. ${gameScore.score} (x${gameScore.multiplier})",
-                        style = scoreValueStyle
+                        style = valueStyle
                     )
                 }
             }
         }
+    }
+
+    // Settings Dialog
+    if (showSettings) {
+        AlertDialog(
+            onDismissRequest = { showSettings = false },
+            containerColor = Color(0xFF151525),
+            title = { Text("Settings", color = Color.White, fontWeight = FontWeight.Bold) },
+            text = {
+                Column {
+                    Text(
+                        text = "Ship Speed: ${"%.1f".format(shipSpeed)}x",
+                        color = Color.White.copy(alpha = 0.8f),
+                        fontSize = 14.sp
+                    )
+                    Slider(
+                        value = shipSpeed,
+                        onValueChange = { 
+                            shipSpeed = it
+                            scoreManager.setShipSpeed(it)
+                        },
+                        valueRange = 0.5f..4.0f,
+                        colors = SliderDefaults.colors(
+                            thumbColor = Color.Cyan,
+                            activeTrackColor = Color.Cyan,
+                            inactiveTrackColor = Color.White.copy(alpha = 0.2f)
+                        )
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showSettings = false }) {
+                    Text("Close", color = Color.Cyan)
+                }
+            }
+        )
     }
 }
 
