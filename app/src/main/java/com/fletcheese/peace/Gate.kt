@@ -1,4 +1,4 @@
-package com.fletcher.peace
+package com.fletcheese.peace
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.fillMaxSize
@@ -18,33 +18,51 @@ class Gate(
     val id: Long,
     private val anchorStart: Offset,
     private val anchorEnd: Offset,
-    private val baseRadius: Float = 24f
+    private val baseRadius: Float = 24f,
+    private val initialLength: Float = 250f
 ) {
+    private val center = (anchorStart + anchorEnd) / 2f
+    private val initialHalfVector = anchorStart - center
+    
     var currentStart by mutableStateOf(anchorStart)
     var currentEnd by mutableStateOf(anchorEnd)
     var isLethal by mutableStateOf(false)
-    private var time = Random.nextFloat() * 100f
+    private var time = Random.nextFloat() * 1000f
+    private var spawnRamp = 0f 
 
-    fun update() {
-        time += 0.01f
-        val driftX = sin(time) * 30f
-        val driftY = cos(time * 0.8f) * 30f
+    fun update(accelMod: Float = 0.01f, maxSpeedMod: Float = 1.0f) {
+        spawnRamp = (spawnRamp + 0.0015f).coerceAtMost(1f)
+        
+        val timeStep = (accelMod + (sin(time * 0.2f) * cos(time * 0.5f) * (accelMod * 0.2f))) * maxSpeedMod
+        time += timeStep
+        
+        val driftX = (sin(time * 0.6f) * 30f + sin(time * 1.3f) * 15f + cos(time * 2.8f) * 8f) * spawnRamp * maxSpeedMod
+        val driftY = (cos(time * 0.8f) * 30f + sin(time * 1.7f) * 15f + sin(time * 3.1f) * 8f) * spawnRamp * maxSpeedMod
         val drift = Offset(driftX, driftY)
-        currentStart = anchorStart + drift
-        currentEnd = anchorEnd + drift
+        
+        val rotation = (sin(time * 0.3f) * 1.1f + cos(time * 0.8f) * 0.4f + sin(time * 2.0f) * 0.1f) * spawnRamp
+        val cosR = cos(rotation)
+        val sinR = sin(rotation)
+        
+        val rotatedHalf = Offset(
+            initialHalfVector.x * cosR - initialHalfVector.y * sinR,
+            initialHalfVector.x * sinR + initialHalfVector.y * cosR
+        )
+        
+        currentStart = center + drift + rotatedHalf
+        currentEnd = center + drift - rotatedHalf
     }
 
     @Composable
-    fun Draw() {
+    fun Draw(color: Color = Color(0xFFFFA500)) {
         LaunchedEffect(Unit) {
             delay(500)
             isLethal = true
         }
 
         Canvas(modifier = Modifier.fillMaxSize()) {
-            val gateColor = if (isLethal) Color(0xFFFFA500) else Color(0xFFFFA500).copy(alpha = 0.5f)
+            val gateColor = if (isLethal) color else color.copy(alpha = 0.5f)
 
-            // 1. Fuzzy Blur Energy Effect
             for (i in 1..7) {
                 drawLine(
                     color = gateColor.copy(alpha = 0.1f),
@@ -55,7 +73,6 @@ class Gate(
                 )
             }
 
-            // 2. Draw Bell-shaped ends
             drawBell(currentStart, currentEnd, gateColor, isLethal)
             drawBell(currentEnd, currentStart, gateColor, isLethal)
         }
@@ -96,9 +113,28 @@ class Gate(
 
     fun checkLethalCollision(playerPos: Offset, playerRadius: Float): Boolean {
         if (!isLethal) return false
-        val d1 = sqrt((playerPos.x - currentStart.x).pow(2) + (playerPos.y - currentStart.y).pow(2))
-        val d2 = sqrt((playerPos.x - currentEnd.x).pow(2) + (playerPos.y - currentEnd.y).pow(2))
-        return d1 < playerRadius + (baseRadius * 1.5f) || d2 < playerRadius + (baseRadius * 1.5f)
+        
+        // Define a tighter lethal radius for the half-circle
+        val lethalRadius = playerRadius + (baseRadius * 1.2f)
+        
+        // Check start end end zone
+        val toPlayerStart = playerPos - currentStart
+        if (toPlayerStart.getDistance() < lethalRadius) {
+            // Direction pointing away from the gate from currentStart
+            val awayDir = (currentStart - currentEnd).let { if (it.getDistance() < 1f) Offset(1f, 0f) else it / it.getDistance() }
+            // Dot product > 0 means the player is on the outer half-circle
+            if (toPlayerStart.x * awayDir.x + toPlayerStart.y * awayDir.y > 0) return true
+        }
+
+        // Check end end end zone
+        val toPlayerEnd = playerPos - currentEnd
+        if (toPlayerEnd.getDistance() < lethalRadius) {
+            // Direction pointing away from the gate from currentEnd
+            val awayDir = (currentEnd - currentStart).let { if (it.getDistance() < 1f) Offset(1f, 0f) else it / it.getDistance() }
+            if (toPlayerEnd.x * awayDir.x + toPlayerEnd.y * awayDir.y > 0) return true
+        }
+        
+        return false
     }
 
     fun checkForActivation(playerPos: Offset, playerRadius: Float): Boolean {
@@ -106,13 +142,11 @@ class Gate(
     }
 }
 
-private const val GATE_LENGTH = 250f
-
-fun createRandomGate(screenSize: IntSize, padding: Float): Gate {
+fun createRandomGate(screenSize: IntSize, padding: Float, length: Float = 250f, endZoneSize: Float = 24f): Gate {
     val totalPadding = padding + 60f
     val angle = Random.nextFloat() * 2 * PI.toFloat()
-    val dx = cos(angle) * GATE_LENGTH
-    val dy = sin(angle) * GATE_LENGTH
+    val dx = cos(angle) * length
+    val dy = sin(angle) * length
     val minX = max(totalPadding, totalPadding - dx)
     val maxX = min(screenSize.width - totalPadding, screenSize.width - totalPadding - dx)
     val minY = max(totalPadding, totalPadding - dy)
@@ -121,7 +155,7 @@ fun createRandomGate(screenSize: IntSize, padding: Float): Gate {
     val startY = if (maxY > minY) Random.nextFloat() * (maxY - minY) + minY else screenSize.height / 2f
     val start = Offset(startX, startY)
     val end = Offset(startX + dx, startY + dy)
-    return Gate(id = System.currentTimeMillis(), anchorStart = start, anchorEnd = end)
+    return Gate(id = System.currentTimeMillis(), anchorStart = start, anchorEnd = end, baseRadius = endZoneSize, initialLength = length)
 }
 
 private fun didLineCrossCircle(

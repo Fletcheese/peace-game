@@ -1,33 +1,22 @@
-package com.fletcher.peace
+package com.fletcheese.peace
 
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
-import kotlinx.coroutines.CoroutineScope
 
-// --- Player Constants ---
-const val PLAYER_CIRCLE_RADIUS = 37.5f // Increased 1.5x from 25f
-
-// --- Player Class ---
-class GamePlayer(
-    initialPosition: Offset,
-    private val coroutineScope: CoroutineScope
-) {
-    val position = Animatable(initialPosition, Offset.VectorConverter)
+class GamePlayer(initialPosition: Offset) {
+    var position by mutableStateOf(initialPosition)
     var rotation by mutableFloatStateOf(0f)
 
-    suspend fun snapTo(offset: Offset) {
-        position.snapTo(offset)
+    fun snapTo(offset: Offset) {
+        position = offset
     }
 
     fun updateRotation(velocity: Offset) {
@@ -40,7 +29,7 @@ class GamePlayer(
     }
 
     @Composable
-    fun Draw() {
+    fun Draw(size: Float = 37.5f) {
         val infiniteTransition = rememberInfiniteTransition(label = "playerGlow")
         val pulseScale by infiniteTransition.animateFloat(
             initialValue = 1.0f,
@@ -53,10 +42,9 @@ class GamePlayer(
         )
 
         Canvas(modifier = Modifier.fillMaxSize()) {
-            val center = position.value
-            val radius = PLAYER_CIRCLE_RADIUS
+            val center = position
+            val radius = size
             
-            // Pulsing Rainbow Glow
             drawCircle(
                 brush = Brush.radialGradient(
                     colors = listOf(

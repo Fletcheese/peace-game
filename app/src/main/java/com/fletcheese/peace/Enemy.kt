@@ -1,4 +1,4 @@
-package com.fletcher.peace
+package com.fletcheese.peace
 
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
@@ -12,26 +12,35 @@ import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.pow
 import kotlin.math.sin
-import kotlin.math.sqrt
 
-// --- Enemy Constants ---
-private const val ENEMY_CIRCLE_RADIUS = 15f
-private const val ENEMY_SPEED = 4f
-
-// --- Enemy Class ---
 class Enemy(
     val id: Long,
-    var position: Offset,
-    private val radius: Float = ENEMY_CIRCLE_RADIUS,
-    private val speed: Float = ENEMY_SPEED
+    initialPosition: Offset,
+    val radius: Float = 15f,
+    private val speed: Float = 4f,
+    private val color: Color = Color.Red
 ) {
+    var position by mutableStateOf(initialPosition)
 
-    fun moveTowards(playerPos: Offset) {
-        val angle = atan2(playerPos.y - position.y, playerPos.x - position.x)
-        position = Offset(
-            x = position.x + cos(angle) * speed,
-            y = position.y + sin(angle) * speed
-        )
+    fun moveTowards(playerPos: Offset, allEnemies: List<Enemy>) {
+        val angleToPlayer = atan2(playerPos.y - position.y, playerPos.x - position.x)
+        var velocity = Offset(cos(angleToPlayer) * speed, sin(angleToPlayer) * speed)
+
+        var separation = Offset.Zero
+        val separationDistance = radius * 2.5f
+        for (other in allEnemies) {
+            if (other.id != this.id) {
+                val dist = position.distanceTo(other.position)
+                if (dist < separationDistance && dist > 0.1f) {
+                    val pushDirection = (position - other.position)
+                    val pushStrength = 1.0f - (dist / separationDistance)
+                    separation += (pushDirection / dist) * pushStrength * 2.0f
+                }
+            }
+        }
+        
+        velocity += separation
+        position += velocity
     }
 
     fun checkCollision(playerPos: Offset, playerRadius: Float): Boolean {
@@ -62,21 +71,19 @@ class Enemy(
         )
 
         Canvas(modifier = Modifier.fillMaxSize()) {
-            // Subtle animated glow
+            val currentPos = position
             drawCircle(
                 brush = Brush.radialGradient(
-                    colors = listOf(Color.Red.copy(alpha = glowAlpha), Color.Transparent),
-                    center = position,
+                    colors = listOf(color.copy(alpha = glowAlpha), Color.Transparent),
+                    center = currentPos,
                     radius = radius * 2.5f * glowScale
                 ),
                 radius = radius * 2.5f * glowScale,
-                center = position
+                center = currentPos
             )
             
-            // Core enemy body
-            drawCircle(Color.Red, radius, position)
-            // Add a small inner detail to make it more "sprite-like"
-            drawCircle(Color.Black.copy(alpha = 0.3f), radius * 0.6f, position)
+            drawCircle(color, radius, currentPos)
+            drawCircle(Color.Black.copy(alpha = 0.3f), radius * 0.6f, currentPos)
         }
     }
 }

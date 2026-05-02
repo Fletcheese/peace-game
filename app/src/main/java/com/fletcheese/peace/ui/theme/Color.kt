@@ -1,4 +1,4 @@
-package com.fletcher.peace.ui.theme
+package com.fletcheese.peace.ui.theme
 
 import androidx.compose.ui.graphics.Color
 

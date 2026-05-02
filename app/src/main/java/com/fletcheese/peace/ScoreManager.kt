@@ -1,4 +1,4 @@
-package com.fletcher.peace
+package com.fletcheese.peace
 
 import android.content.Context
 import android.content.SharedPreferences

@@ -19,5 +19,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "Greeting Card"
+rootProject.name = "PEACE"
 include(":app")

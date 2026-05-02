@@ -1,4 +1,4 @@
-package com.fletcher.peace
+package com.fletcheese.peace
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutLinearInEasing
