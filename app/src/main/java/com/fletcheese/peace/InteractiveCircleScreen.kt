@@ -1,6 +1,7 @@
 package com.fletcheese.peace
 
 import android.util.Log
+import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -19,15 +20,19 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlin.math.*
 import kotlin.random.Random
 
@@ -37,6 +42,20 @@ private const val SPAWN_CORNER_PADDING = 100f
 private const val SPAWN_SPREAD_RADIUS = 60f
 private const val MIN_SPAWN_DISTANCE_FROM_PLAYER = 500f
 private const val SHARD_PICKUP_RADIUS = 45f
+
+// --- Tutorial Step Enum ---
+enum class TutorialStep {
+    WAITING_FOR_SPAWN,
+    SHOWING_SPAWN_INFO,
+    WAITING_FOR_ENEMIES,
+    SHOWING_MOVEMENT_INFO,
+    WAITING_FOR_GATE,
+    SHOWING_GATE_INFO,
+    WAITING_FOR_EXPLOSION,
+    SHOWING_SHARD_INFO,
+    SHOWING_FINAL_INFO,
+    COMPLETED
+}
 
 fun Offset.distanceTo(other: Offset) = sqrt((this.x - other.x).pow(2) + (this.y - other.y).pow(2))
 
@@ -71,6 +90,19 @@ fun InteractiveCircleScreen(onNavigateHome: () -> Unit = {}) {
     var hasBeenCentered by remember { mutableStateOf(false) }
     var gameOverMessage by remember { mutableStateOf("Game Over") }
 
+    // --- UI Animation State ---
+    val scoreScale = remember { Animatable(1f) }
+    val scoreAlpha = remember { Animatable(0.4f) }
+    val scoreColor = remember { Animatable(Color.Green) }
+    val multiplierScale = remember { Animatable(1f) }
+    val multiplierAlpha = remember { Animatable(0.4f) }
+    val multiplierColor = remember { Animatable(Color.Cyan) }
+
+    // --- Tutorial State ---
+    var tutorialStep by remember { mutableStateOf(if (scoreManager.isTutorialCompleted()) TutorialStep.COMPLETED else TutorialStep.WAITING_FOR_SPAWN) }
+    var tutorialVisible by remember { mutableStateOf(false) }
+    var hasExplodedGate by remember { mutableStateOf(false) }
+
     val cameraOffset by remember {
         derivedStateOf {
             if (screenSize == IntSize.Zero) Offset.Zero else {
@@ -104,12 +136,104 @@ fun InteractiveCircleScreen(onNavigateHome: () -> Unit = {}) {
         shards = emptyList()
         score = 0
         multiplier = 0
+        hasExplodedGate = false
         playerVelocity = Offset(Random.nextFloat() * 2f - 1f, Random.nextFloat() * 2f - 1f) * 2f
         val worldWidth = screenSize.width * WORLD_SCALE
         val worldHeight = screenSize.height * WORLD_SCALE
         player.snapTo(Offset(worldWidth / 2f, worldHeight / 2f))
         showGameOverDialog = false
         isPaused = false
+    }
+
+    // --- Score & Multiplier Animations ---
+    LaunchedEffect(score) {
+        if (score > 0) {
+            launch {
+                scoreScale.animateTo(1.5f, tween(500, easing = LinearOutSlowInEasing))
+                scoreScale.animateTo(1f, tween(500, easing = FastOutLinearInEasing))
+            }
+            launch {
+                scoreAlpha.animateTo(1f, tween(500))
+                scoreAlpha.animateTo(0.4f, tween(500))
+            }
+            launch {
+                scoreColor.animateTo(Color.White, tween(500))
+                scoreColor.animateTo(Color.Green, tween(500))
+            }
+        }
+    }
+
+    LaunchedEffect(multiplier) {
+        if (multiplier > 0) {
+            launch {
+                multiplierScale.animateTo(1.8f, tween(500, easing = LinearOutSlowInEasing))
+                multiplierScale.animateTo(1f, tween(500, easing = FastOutLinearInEasing))
+            }
+            launch {
+                multiplierAlpha.animateTo(1f, tween(500))
+                multiplierAlpha.animateTo(0.4f, tween(500))
+            }
+            launch {
+                multiplierColor.animateTo(Color.White, tween(500))
+                multiplierColor.animateTo(Color.Cyan, tween(500))
+            }
+        }
+    }
+
+    // --- Tutorial Logic ---
+    LaunchedEffect(tutorialStep) {
+        if (tutorialStep == TutorialStep.COMPLETED) return@LaunchedEffect
+        
+        val isShowingStep = when (tutorialStep) {
+            TutorialStep.SHOWING_SPAWN_INFO,
+            TutorialStep.SHOWING_MOVEMENT_INFO,
+            TutorialStep.SHOWING_GATE_INFO,
+            TutorialStep.SHOWING_SHARD_INFO,
+            TutorialStep.SHOWING_FINAL_INFO -> true
+            else -> false
+        }
+
+        if (isShowingStep) {
+            if (tutorialStep == TutorialStep.SHOWING_FINAL_INFO) {
+                scoreManager.setTutorialCompleted(true)
+            }
+            
+            tutorialVisible = true
+            
+            // Respect isPaused and GameOver by counting active time
+            var activeTime = 0L
+            while (activeTime < 6000L) {
+                delay(100)
+                if (!isPaused && !showGameOverDialog) activeTime += 100
+            }
+            
+            tutorialVisible = false
+            delay(1000) // Wait for fade out
+            
+            val nextStep = when (tutorialStep) {
+                TutorialStep.SHOWING_SPAWN_INFO -> TutorialStep.WAITING_FOR_ENEMIES
+                TutorialStep.SHOWING_MOVEMENT_INFO -> TutorialStep.WAITING_FOR_GATE
+                TutorialStep.SHOWING_GATE_INFO -> TutorialStep.WAITING_FOR_EXPLOSION
+                TutorialStep.SHOWING_SHARD_INFO -> TutorialStep.SHOWING_FINAL_INFO
+                TutorialStep.SHOWING_FINAL_INFO -> TutorialStep.COMPLETED
+                else -> tutorialStep
+            }
+            
+            tutorialStep = nextStep
+        }
+    }
+
+    LaunchedEffect(upcomingEnemyCorner, enemies, gates, hasExplodedGate, tutorialStep) {
+        val nextStep = when (tutorialStep) {
+            TutorialStep.WAITING_FOR_SPAWN -> if (upcomingEnemyCorner != null) TutorialStep.SHOWING_SPAWN_INFO else null
+            TutorialStep.WAITING_FOR_ENEMIES -> if (enemies.isNotEmpty()) TutorialStep.SHOWING_MOVEMENT_INFO else null
+            TutorialStep.WAITING_FOR_GATE -> if (gates.isNotEmpty()) TutorialStep.SHOWING_GATE_INFO else null
+            TutorialStep.WAITING_FOR_EXPLOSION -> if (hasExplodedGate) TutorialStep.SHOWING_SHARD_INFO else null
+            else -> null
+        }
+        if (nextStep != null) {
+            tutorialStep = nextStep
+        }
     }
 
     LaunchedEffect(hasBeenCentered) {
@@ -217,7 +341,11 @@ fun InteractiveCircleScreen(onNavigateHome: () -> Unit = {}) {
                     }
 
                     val collected = shards.filter { it.position.distanceTo(playerPos) < SHARD_PICKUP_RADIUS }
-                    if (collected.isNotEmpty()) { multiplier += collected.size; shards = shards - collected.toSet() }
+                    if (collected.isNotEmpty()) { 
+                        multiplier += collected.size
+                        shards = shards - collected.toSet()
+                        SoundManager.play(R.raw.shard_pickup)
+                    }
 
                     val gatesToRemove = mutableListOf<Gate>()
                     for (gate in gates) {
@@ -226,6 +354,8 @@ fun InteractiveCircleScreen(onNavigateHome: () -> Unit = {}) {
                             showGameOverDialog = true; playerVelocity = Offset.Zero
                         }
                         if (gate.checkForActivation(playerPos, activeProfile.playerSize)) {
+                            hasExplodedGate = true
+                            SoundManager.play(R.raw.gate_explode)
                             explosions.addAll(listOf(
                                 Explosion(System.nanoTime(), gate.currentStart, Color.White, initialRadius = activeProfile.gateEndZoneSize / 2f, targetRadius = activeProfile.gateExplosionRadius),
                                 Explosion(System.nanoTime() + 1, gate.currentEnd, Color.White, initialRadius = activeProfile.gateEndZoneSize / 2f, targetRadius = activeProfile.gateExplosionRadius)
@@ -259,7 +389,7 @@ fun InteractiveCircleScreen(onNavigateHome: () -> Unit = {}) {
                     hasBeenCentered = true
                 }
             }
-            .pointerInput(Unit) {
+            .pointerInput(showGameOverDialog, isPaused) {
                 if (showGameOverDialog || isPaused) return@pointerInput
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
@@ -299,9 +429,66 @@ fun InteractiveCircleScreen(onNavigateHome: () -> Unit = {}) {
             }
         }
 
-        Text(text = "Score: $score", modifier = Modifier.align(Alignment.TopStart).padding(top = 40.dp, start = 16.dp), color = Color.Green, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-        Text(text = "x$multiplier", modifier = Modifier.align(Alignment.TopEnd).padding(top = 40.dp, end = 16.dp), color = Color.Cyan, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+        Text(
+            text = "Score: $score",
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .padding(top = 40.dp, start = 16.dp)
+                .graphicsLayer {
+                    scaleX = scoreScale.value
+                    scaleY = scoreScale.value
+                    alpha = scoreAlpha.value
+                    transformOrigin = TransformOrigin(0f, 0.5f)
+                },
+            color = scoreColor.value,
+            fontSize = 20.sp,
+            fontWeight = FontWeight.Bold
+        )
+        Text(
+            text = "x$multiplier",
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(top = 40.dp, end = 16.dp)
+                .graphicsLayer {
+                    scaleX = multiplierScale.value
+                    scaleY = multiplierScale.value
+                    alpha = multiplierAlpha.value
+                    transformOrigin = TransformOrigin(1f, 0.5f)
+                },
+            color = multiplierColor.value,
+            fontSize = 20.sp,
+            fontWeight = FontWeight.Bold
+        )
         Text(text = "||", color = Color.White.copy(alpha = 0.4f), fontSize = 18.sp, fontWeight = FontWeight.Bold, modifier = Modifier.align(Alignment.TopCenter).padding(top = 40.dp).clickable { isPaused = true }.padding(8.dp))
+
+        // --- Tutorial Overlay ---
+        val tutorialMessage = when (tutorialStep) {
+            TutorialStep.SHOWING_SPAWN_INFO -> "Enemies are spawning..." to "Watch for the red glow!"
+            TutorialStep.SHOWING_MOVEMENT_INFO -> "Tap to move in any direction" to "Avoid enemies & gate ends"
+            TutorialStep.SHOWING_GATE_INFO -> "Run through gates to detonate the ends" to "Nearby enemies will explode"
+            TutorialStep.SHOWING_SHARD_INFO -> "Collect dropped shards" to "Increase your multiplier and rack up a high score"
+            TutorialStep.SHOWING_FINAL_INFO -> "That's it!" to "I hope you enjoy PEACE"
+            else -> null
+        }
+
+        tutorialMessage?.let { (title, sub) ->
+            AnimatedVisibility(
+                visible = tutorialVisible,
+                enter = fadeIn(tween(1000)),
+                exit = fadeOut(tween(1000)),
+                modifier = Modifier.align(Alignment.TopCenter).padding(top = 80.dp)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .background(Color.Black.copy(alpha = 0.25f), RoundedCornerShape(12.dp))
+                        .padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(title, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+                    Text(sub, color = if (tutorialStep == TutorialStep.SHOWING_SPAWN_INFO) Color.Red else Color.Cyan, fontSize = 14.sp, textAlign = TextAlign.Center)
+                }
+            }
+        }
 
         if (isPaused) {
             Box(modifier = Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.5f)).clickable { isPaused = false }, contentAlignment = Alignment.Center) {

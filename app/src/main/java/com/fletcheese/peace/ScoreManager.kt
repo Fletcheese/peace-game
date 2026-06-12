@@ -49,4 +49,13 @@ class ScoreManager(context: Context) {
 
     fun getShipSpeed(): Float = prefs.getFloat("ship_speed", 1.0f)
     fun setShipSpeed(speed: Float) = prefs.edit().putFloat("ship_speed", speed).apply()
+
+    fun isTutorialCompleted(): Boolean = prefs.getBoolean("tutorial_completed", false)
+    fun setTutorialCompleted(completed: Boolean) = prefs.edit().putBoolean("tutorial_completed", completed).apply()
+
+    fun getMusicVolume(): Float = prefs.getFloat("music_volume", 0.5f)
+    fun setMusicVolume(volume: Float) = prefs.edit().putFloat("music_volume", volume).apply()
+
+    fun getSoundVolume(): Float = prefs.getFloat("sound_volume", 0.8f)
+    fun setSoundVolume(volume: Float) = prefs.edit().putFloat("sound_volume", volume).apply()
 }

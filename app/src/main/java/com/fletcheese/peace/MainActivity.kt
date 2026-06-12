@@ -4,14 +4,17 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.os.Bundle
+import android.view.Gravity
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.core.*
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
@@ -52,6 +55,20 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        
+        val scoreManager = ScoreManager(this)
+        
+        // Initialize Sound Systems with saved volumes
+        MusicManager.start(this, R.raw.bg_music)
+        MusicManager.setVolume(scoreManager.getMusicVolume())
+        
+        SoundManager.init(this)
+        SoundManager.setVolume(scoreManager.getSoundVolume())
+        
+        // Pre-load sound effects
+        SoundManager.load(this, R.raw.gate_explode)
+        SoundManager.load(this, R.raw.shard_pickup)
+
         setContent {
             GreetingCardTheme {
                 val navController = rememberNavController()
@@ -78,6 +95,22 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        MusicManager.start(this, R.raw.bg_music)
+    }
+
+    override fun onPause() {
+        super.onPause()
+        MusicManager.pause()
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        MusicManager.stop()
+        SoundManager.release()
     }
 
     private fun setImmersiveMode(enable: Boolean) {
@@ -110,6 +143,7 @@ fun HomeScreen(navController: NavController, modifier: Modifier = Modifier) {
     
     var showModDialog by remember { mutableStateOf(false) }
     var showInfoDialog by remember { mutableStateOf(false) }
+    var isTutorialCompleted by remember(showInfoDialog) { mutableStateOf(scoreManager.isTutorialCompleted()) }
 
     Box(
         modifier = modifier
@@ -252,6 +286,7 @@ fun HomeScreen(navController: NavController, modifier: Modifier = Modifier) {
     if (showModDialog) {
         ModDialog(
             modManager = modManager,
+            scoreManager = scoreManager,
             onDismiss = { showModDialog = false }
         )
     }
@@ -261,22 +296,77 @@ fun HomeScreen(navController: NavController, modifier: Modifier = Modifier) {
             onDismissRequest = { showInfoDialog = false },
             containerColor = Color(0xFF151525),
             text = {
-                Text(
-                    text = "Enjoying Peace? Click here to find more by Fletcheese",
-                    color = Color.Cyan,
-                    fontSize = 18.sp,
-                    textAlign = TextAlign.Center,
-                    textDecoration = TextDecoration.Underline,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { uriHandler.openUri("https://github.com/fletcheese") }
-                        .padding(16.dp)
-                )
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                isTutorialCompleted = !isTutorialCompleted
+                                scoreManager.setTutorialCompleted(isTutorialCompleted)
+                            }
+                            .padding(8.dp)
+                    ) {
+                        Checkbox(
+                            checked = isTutorialCompleted,
+                            onCheckedChange = {
+                                isTutorialCompleted = it
+                                scoreManager.setTutorialCompleted(it)
+                            },
+                            colors = CheckboxDefaults.colors(
+                                checkedColor = Color.Cyan,
+                                uncheckedColor = Color.White.copy(alpha = 0.6f),
+                                checkmarkColor = Color.Black
+                            )
+                        )
+                        Column {
+                            Text("Tutorial Completed", color = Color.White, fontSize = 16.sp)
+                            Text("Untick to repeat it", color = Color.White.copy(alpha = 0.6f), fontSize = 12.sp)
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(24.dp))
+
+                    val rainbowBrush = Brush.sweepGradient(
+                        colors = listOf(
+                            Color.Red, Color.Magenta, Color.Blue,
+                            Color.Cyan, Color.Green, Color.Yellow, Color.Red
+                        )
+                    )
+                    Text(
+                        text = "Enjoying PEACE?",
+                        style = TextStyle(
+                            brush = rainbowBrush,
+                            fontSize = 24.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    )
+                    
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { uriHandler.openUri("https://github.com/fletcheese") }
+                            .padding(8.dp)
+                    ) {
+                        Text("🔗 ", fontSize = 18.sp)
+                        Text(
+                            text = "Find more by\nme on Github",
+                            color = Color.Cyan,
+                            fontSize = 16.sp,
+                            textDecoration = TextDecoration.Underline,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
             },
             confirmButton = {},
             dismissButton = {
                 TextButton(onClick = { showInfoDialog = false }) {
-                    Text("No thanks", color = Color.White.copy(alpha = 0.6f))
+                    Text("Close", color = Color.White.copy(alpha = 0.6f))
                 }
             }
         )
@@ -287,6 +377,7 @@ fun HomeScreen(navController: NavController, modifier: Modifier = Modifier) {
 @Composable
 fun ModDialog(
     modManager: ModManager,
+    scoreManager: ScoreManager,
     onDismiss: () -> Unit
 ) {
     val profiles = remember { mutableStateListOf<ModProfile>().apply { addAll(modManager.getProfiles()) } }
@@ -309,10 +400,47 @@ fun ModDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = Color(0xFF151525),
-        title = { Text("Mod Profiles", color = Color.White) },
+        title = { Text("Settings", color = Color.White) },
         text = {
             LazyColumn(modifier = Modifier.fillMaxWidth()) {
                 item {
+                    SectionHeader("Audio")
+                    var musicVol by remember { mutableStateOf(scoreManager.getMusicVolume()) }
+                    var soundVol by remember { mutableStateOf(scoreManager.getSoundVolume()) }
+
+                    Column(modifier = Modifier.padding(vertical = 4.dp)) {
+                        Text(text = "Music Volume: ${if (musicVol == 0f) "Muted" else "${(musicVol * 100).toInt()}%"}", color = Color.White.copy(alpha = 0.7f), fontSize = 12.sp)
+                        Slider(
+                            value = musicVol,
+                            onValueChange = { 
+                                musicVol = it
+                                scoreManager.setMusicVolume(it)
+                                MusicManager.setVolume(it)
+                            },
+                            colors = SliderDefaults.colors(thumbColor = Color.Cyan, activeTrackColor = Color.Cyan)
+                        )
+                        
+                        Spacer(modifier = Modifier.height(8.dp))
+                        
+                        Text(text = "Sound Effects: ${if (soundVol == 0f) "Muted" else "${(soundVol * 100).toInt()}%"}", color = Color.White.copy(alpha = 0.7f), fontSize = 12.sp)
+                        Slider(
+                            value = soundVol,
+                            onValueChange = { 
+                                soundVol = it
+                                scoreManager.setSoundVolume(it)
+                                SoundManager.setVolume(it)
+                            },
+                            colors = SliderDefaults.colors(thumbColor = Color.Cyan, activeTrackColor = Color.Cyan)
+                        )
+                    }
+                    
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Divider(color = Color.White.copy(alpha = 0.1f))
+                    Spacer(modifier = Modifier.height(16.dp))
+                }
+
+                item {
+                    SectionHeader("Mod Profiles")
                     var expanded by remember { mutableStateOf(false) }
                     ExposedDropdownMenuBox(
                         expanded = expanded,
@@ -322,7 +450,7 @@ fun ModDialog(
                             value = currentProfile.label,
                             onValueChange = {},
                             readOnly = true,
-                            label = { Text("Profile") },
+                            label = { Text("Active Profile") },
                             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
                             colors = ExposedDropdownMenuDefaults.textFieldColors(),
                             modifier = Modifier.menuAnchor().fillMaxWidth()
@@ -354,133 +482,171 @@ fun ModDialog(
                     }
                 }
 
-                if (currentProfile.isEditable) {
-                    item {
-                        var localLabel by remember(currentProfile.id) { mutableStateOf(currentProfile.label) }
-                        Spacer(modifier = Modifier.height(16.dp))
-                        TextField(
-                            value = localLabel,
-                            onValueChange = { localLabel = it },
-                            modifier = Modifier.fillMaxWidth().onFocusChanged { 
-                                if (!it.isFocused) {
-                                    updateProfile(currentProfile.copy(label = localLabel))
+                item {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = {
+                                val jsonString = Json.encodeToString(currentProfile)
+                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                clipboard.setPrimaryClip(ClipData.newPlainText("Peace Mod", jsonString))
+                                Toast.makeText(context, "Profile copied to clipboard", Toast.LENGTH_SHORT).show()
+                            },
+                            modifier = Modifier.weight(1f),
+                            border = BorderStroke(1.dp, Color.Cyan.copy(alpha = 0.5f)),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.Cyan)
+                        ) {
+                            Text("Export")
+                        }
+
+                        OutlinedButton(
+                            onClick = {
+                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                val data = clipboard.primaryClip?.getItemAt(0)?.text?.toString()
+                                if (data != null) {
+                                    try {
+                                        val imported = Json.decodeFromString<ModProfile>(data)
+                                        val existingIndex = profiles.indexOfFirst { it.id == imported.id }
+                                        if (existingIndex != -1) {
+                                            val toUpdate = imported.copy(isEditable = true)
+                                            profiles[existingIndex] = toUpdate
+                                            modManager.setSelectedProfileId(toUpdate.id)
+                                            selectedProfileId = toUpdate.id
+                                            Toast.makeText(context, "${toUpdate.label} updated", Toast.LENGTH_SHORT).show()
+                                        } else {
+                                            val toAdd = imported.copy(id = UUID.randomUUID().toString(), isEditable = true)
+                                            profiles.add(toAdd)
+                                            modManager.setSelectedProfileId(toAdd.id)
+                                            selectedProfileId = toAdd.id
+                                            Toast.makeText(context, "${toAdd.label} imported", Toast.LENGTH_SHORT).show()
+                                        }
+                                        modManager.saveProfiles(profiles.filter { it.isEditable })
+                                    } catch (e: Exception) {
+                                        Toast.makeText(context, "Invalid profile data", Toast.LENGTH_LONG).show()
+                                    }
                                 }
                             },
-                            label = { Text("Profile Name") }
-                        )
+                            modifier = Modifier.weight(1f),
+                            border = BorderStroke(1.dp, Color.Cyan.copy(alpha = 0.5f)),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.Cyan)
+                        ) {
+                            Text("Import")
+                        }
                     }
                 }
 
                 item {
-                    Text(
-                        text = "These settings have had limited testing so things may break, but have fun with it!",
-                        color = Color.White.copy(alpha = 0.5f),
-                        fontSize = 11.sp,
-                        fontStyle = FontStyle.Italic,
-                        lineHeight = 14.sp,
-                        modifier = Modifier.padding(vertical = 8.dp)
-                    )
-                }
-
-                item {
-                    SectionHeader("Enemy")
-                    ColorSelector("Enemy Color", currentProfile.enemyColor, currentProfile.isEditable) { colorInt ->
-                        updateProfile(currentProfile.copy(enemyColor = colorInt))
-                    }
-                    ModSlider("Max Speed", currentProfile.enemyMaxSpeed, 0.5f, 2.0f, ModManager.DefaultValues.ENEMY_SPEED, currentProfile.isEditable) { 
-                        updateProfile(currentProfile.copy(enemyMaxSpeed = it))
-                    }
-                    ModSlider("Acceleration", currentProfile.enemyAcceleration, 0.5f, 2.0f, ModManager.DefaultValues.ENEMY_ACCEL, currentProfile.isEditable) { 
-                        updateProfile(currentProfile.copy(enemyAcceleration = it))
-                    }
-                    ModSlider("Size", currentProfile.enemySize, 0.5f, 2.0f, ModManager.DefaultValues.ENEMY_SIZE, currentProfile.isEditable) { 
-                        updateProfile(currentProfile.copy(enemySize = it))
-                    }
-                    ModSlider("Spawn Rate", currentProfile.enemySpawnRateMod, 0.5f, 2.0f, 1.0f, currentProfile.isEditable) { 
-                        updateProfile(currentProfile.copy(enemySpawnRateMod = it))
-                    }
-                    ModSlider("Cluster Count", currentProfile.enemySpawnCount.toFloat(), 1f, 10f, ModManager.DefaultValues.ENEMY_COUNT, currentProfile.isEditable) { 
-                        updateProfile(currentProfile.copy(enemySpawnCount = it.toInt()))
-                    }
-
-                    SectionHeader("Player")
-                    ModSlider("Max Speed", currentProfile.playerMaxSpeed, 0.5f, 2.0f, ModManager.DefaultValues.PLAYER_SPEED, currentProfile.isEditable) { 
-                        updateProfile(currentProfile.copy(playerMaxSpeed = it))
-                    }
-                    ModSlider("Acceleration", currentProfile.playerAcceleration, 0.5f, 2.0f, ModManager.DefaultValues.PLAYER_ACCEL, currentProfile.isEditable) { 
-                        updateProfile(currentProfile.copy(playerAcceleration = it))
-                    }
-                    ModSlider("Size", currentProfile.playerSize, 0.5f, 2.0f, ModManager.DefaultValues.PLAYER_SIZE, currentProfile.isEditable) { 
-                        updateProfile(currentProfile.copy(playerSize = it))
-                    }
-
-                    SectionHeader("Gate")
-                    ColorSelector("Gate Color", currentProfile.gateColor, currentProfile.isEditable) { colorInt ->
-                        updateProfile(currentProfile.copy(gateColor = colorInt))
-                    }
-                    ModSlider("Max Speed", currentProfile.gateMaxSpeed, 0.5f, 2.0f, ModManager.DefaultValues.GATE_SPEED, currentProfile.isEditable) { 
-                        updateProfile(currentProfile.copy(gateMaxSpeed = it))
-                    }
-                    ModSlider("Acceleration", currentProfile.gateAcceleration, 0.5f, 2.0f, ModManager.DefaultValues.GATE_ACCEL, currentProfile.isEditable) { 
-                        updateProfile(currentProfile.copy(gateAcceleration = it))
-                    }
-                    ModSlider("Length", currentProfile.gateLength, 0.5f, 2.0f, ModManager.DefaultValues.GATE_LENGTH, currentProfile.isEditable) { 
-                        updateProfile(currentProfile.copy(gateLength = it))
-                    }
-                    ModSlider("End Zone Size", currentProfile.gateEndZoneSize, 0.5f, 2.0f, ModManager.DefaultValues.GATE_END_ZONE, currentProfile.isEditable) { 
-                        updateProfile(currentProfile.copy(gateEndZoneSize = it))
-                    }
-                    ModSlider("Explosion Radius", currentProfile.gateExplosionRadius, 0.5f, 2.0f, ModManager.DefaultValues.GATE_EXPLOSION, currentProfile.isEditable) { 
-                        updateProfile(currentProfile.copy(gateExplosionRadius = it))
-                    }
-                    ModSlider("Spawn Rate", currentProfile.gateSpawnRateMod, 0.5f, 2.0f, 1.0f, currentProfile.isEditable) { 
-                        updateProfile(currentProfile.copy(gateSpawnRateMod = it))
-                    }
-                }
-
-                item {
-                    Spacer(modifier = Modifier.height(24.dp))
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                        TextButton(onClick = {
-                            val jsonString = Json.encodeToString(currentProfile)
-                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                            clipboard.setPrimaryClip(ClipData.newPlainText("Peace Mod", jsonString))
-                            Toast.makeText(context, "Profile copied to clipboard", Toast.LENGTH_SHORT).show()
-                        }) { Text("Export", color = Color.Cyan) }
-                        
-                        TextButton(onClick = {
-                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                            val data = clipboard.primaryClip?.getItemAt(0)?.text?.toString()
-                            if (data != null) {
-                                try {
-                                    val imported = Json.decodeFromString<ModProfile>(data)
-                                    val existingIndex = profiles.indexOfFirst { it.id == imported.id }
-                                    if (existingIndex != -1) {
-                                        val toUpdate = imported.copy(isEditable = true)
-                                        profiles[existingIndex] = toUpdate
-                                        modManager.setSelectedProfileId(toUpdate.id)
-                                        selectedProfileId = toUpdate.id
-                                        Toast.makeText(context, "${toUpdate.label} updated", Toast.LENGTH_SHORT).show()
-                                    } else {
-                                        val toAdd = imported.copy(id = UUID.randomUUID().toString(), isEditable = true)
-                                        profiles.add(toAdd)
-                                        modManager.setSelectedProfileId(toAdd.id)
-                                        selectedProfileId = toAdd.id
-                                        Toast.makeText(context, "${toAdd.label} imported", Toast.LENGTH_SHORT).show()
-                                    }
-                                    modManager.saveProfiles(profiles.filter { it.isEditable })
-                                } catch (e: Exception) {
-                                    Toast.makeText(context, "Invalid profile data", Toast.LENGTH_LONG).show()
-                                }
+                    Box {
+                        Column {
+                            if (currentProfile.isEditable) {
+                                var localLabel by remember(currentProfile.id) { mutableStateOf(currentProfile.label) }
+                                Spacer(modifier = Modifier.height(16.dp))
+                                TextField(
+                                    value = localLabel,
+                                    onValueChange = { localLabel = it },
+                                    modifier = Modifier.fillMaxWidth().onFocusChanged { 
+                                        if (!it.isFocused) {
+                                            updateProfile(currentProfile.copy(label = localLabel))
+                                        }
+                                    },
+                                    label = { Text("Profile Name") }
+                                )
                             }
-                        }) { Text("Import", color = Color.Cyan) }
-                        
-                        if (currentProfile.isEditable) {
+
+                            Text(
+                                text = "These settings have had limited testing so things may break, but have fun with it!",
+                                color = Color.White.copy(alpha = 0.5f),
+                                fontSize = 11.sp,
+                                fontStyle = FontStyle.Italic,
+                                lineHeight = 14.sp,
+                                modifier = Modifier.padding(vertical = 8.dp)
+                            )
+
+                            SectionHeader("Enemy")
+                            ColorSelector("Enemy Color", currentProfile.enemyColor, currentProfile.isEditable) { colorInt ->
+                                updateProfile(currentProfile.copy(enemyColor = colorInt))
+                            }
+                            ModSlider("Max Speed", currentProfile.enemyMaxSpeed, 0.5f, 2.0f, ModManager.DefaultValues.ENEMY_SPEED, currentProfile.isEditable) { 
+                                updateProfile(currentProfile.copy(enemyMaxSpeed = it))
+                            }
+                            ModSlider("Acceleration", currentProfile.enemyAcceleration, 0.5f, 2.0f, ModManager.DefaultValues.ENEMY_ACCEL, currentProfile.isEditable) { 
+                                updateProfile(currentProfile.copy(enemyAcceleration = it))
+                            }
+                            ModSlider("Size", currentProfile.enemySize, 0.5f, 2.0f, ModManager.DefaultValues.ENEMY_SIZE, currentProfile.isEditable) { 
+                                updateProfile(currentProfile.copy(enemySize = it))
+                            }
+                            ModSlider("Spawn Rate", currentProfile.enemySpawnRateMod, 0.5f, 2.0f, 1.0f, currentProfile.isEditable) { 
+                                updateProfile(currentProfile.copy(enemySpawnRateMod = it))
+                            }
+                            ModSlider("Cluster Count", currentProfile.enemySpawnCount.toFloat(), 1f, 10f, ModManager.DefaultValues.ENEMY_COUNT, currentProfile.isEditable) { 
+                                updateProfile(currentProfile.copy(enemySpawnCount = it.toInt()))
+                            }
+
+                            SectionHeader("Player")
+                            ModSlider("Max Speed", currentProfile.playerMaxSpeed, 0.5f, 2.0f, ModManager.DefaultValues.PLAYER_SPEED, currentProfile.isEditable) { 
+                                updateProfile(currentProfile.copy(playerMaxSpeed = it))
+                            }
+                            ModSlider("Acceleration", currentProfile.playerAcceleration, 0.5f, 2.0f, ModManager.DefaultValues.PLAYER_ACCEL, currentProfile.isEditable) { 
+                                updateProfile(currentProfile.copy(playerAcceleration = it))
+                            }
+                            ModSlider("Size", currentProfile.playerSize, 0.5f, 2.0f, ModManager.DefaultValues.PLAYER_SIZE, currentProfile.isEditable) { 
+                                updateProfile(currentProfile.copy(playerSize = it))
+                            }
+
+                            SectionHeader("Gate")
+                            ColorSelector("Gate Color", currentProfile.gateColor, currentProfile.isEditable) { colorInt ->
+                                updateProfile(currentProfile.copy(gateColor = colorInt))
+                            }
+                            ModSlider("Max Speed", currentProfile.gateMaxSpeed, 0.5f, 2.0f, ModManager.DefaultValues.GATE_SPEED, currentProfile.isEditable) { 
+                                updateProfile(currentProfile.copy(gateMaxSpeed = it))
+                            }
+                            ModSlider("Acceleration", currentProfile.gateAcceleration, 0.5f, 2.0f, ModManager.DefaultValues.GATE_ACCEL, currentProfile.isEditable) { 
+                                updateProfile(currentProfile.copy(gateAcceleration = it))
+                            }
+                            ModSlider("Length", currentProfile.gateLength, 0.5f, 2.0f, ModManager.DefaultValues.GATE_LENGTH, currentProfile.isEditable) { 
+                                updateProfile(currentProfile.copy(gateLength = it))
+                            }
+                            ModSlider("End Zone Size", currentProfile.gateEndZoneSize, 0.5f, 2.0f, ModManager.DefaultValues.GATE_END_ZONE, currentProfile.isEditable) { 
+                                updateProfile(currentProfile.copy(gateEndZoneSize = it))
+                            }
+                            ModSlider("Explosion Radius", currentProfile.gateExplosionRadius, 0.5f, 2.0f, ModManager.DefaultValues.GATE_EXPLOSION, currentProfile.isEditable) { 
+                                updateProfile(currentProfile.copy(gateExplosionRadius = it))
+                            }
+                            ModSlider("Spawn Rate", currentProfile.gateSpawnRateMod, 0.5f, 2.0f, 1.0f, currentProfile.isEditable) { 
+                                updateProfile(currentProfile.copy(gateSpawnRateMod = it))
+                            }
+                        }
+
+                        if (!currentProfile.isEditable) {
+                            Box(
+                                modifier = Modifier
+                                    .matchParentSize()
+                                    .clickable(
+                                        interactionSource = remember { MutableInteractionSource() },
+                                        indication = null
+                                    ) {
+                                        val toast = Toast.makeText(context, "Create custom profile to modify ${currentProfile.label}", Toast.LENGTH_SHORT)
+                                        toast.setGravity(Gravity.TOP, 0, 100)
+                                        toast.show()
+                                    }
+                            )
+                        }
+                    }
+                }
+
+                item {
+                    if (currentProfile.isEditable) {
+                        Spacer(modifier = Modifier.height(24.dp))
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
                             TextButton(onClick = {
                                 modManager.deleteProfile(currentProfile.id)
                                 profiles.removeIf { it.id == currentProfile.id }
                                 selectedProfileId = "standard"
-                            }) { Text("Delete", color = Color.Red) }
+                            }) { Text("Delete Profile", color = Color.Red) }
                         }
                     }
                 }
