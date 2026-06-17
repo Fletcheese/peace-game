@@ -32,6 +32,7 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -59,8 +60,8 @@ class MainActivity : ComponentActivity() {
         val scoreManager = ScoreManager(this)
         
         // Initialize Sound Systems with saved volumes
-        MusicManager.start(this, R.raw.bg_music)
         MusicManager.setVolume(scoreManager.getMusicVolume())
+        MusicManager.playMenuMusic(this)
         
         SoundManager.init(this)
         SoundManager.setVolume(scoreManager.getSoundVolume())
@@ -78,14 +79,20 @@ class MainActivity : ComponentActivity() {
                         startDestination = "greeting",
                     ) {
                         composable("greeting") {
-                            LaunchedEffect(Unit) { setImmersiveMode(false) }
+                            LaunchedEffect(Unit) { 
+                                setImmersiveMode(false)
+                                MusicManager.playMenuMusic(this@MainActivity)
+                            }
                             HomeScreen(
                                 navController = navController,
                                 modifier = Modifier.padding(innerPadding)
                             )
                         }
                         composable("circleScreen") {
-                            LaunchedEffect(Unit) { setImmersiveMode(true) }
+                            LaunchedEffect(Unit) { 
+                                setImmersiveMode(true)
+                                MusicManager.playGameMusic(this@MainActivity)
+                            }
                             InteractiveCircleScreen(onNavigateHome = {
                                 setImmersiveMode(false)
                                 navController.popBackStack("greeting", inclusive = false)
@@ -99,7 +106,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        MusicManager.start(this, R.raw.bg_music)
+        MusicManager.start(this)
     }
 
     override fun onPause() {
@@ -355,6 +362,32 @@ fun HomeScreen(navController: NavController, modifier: Modifier = Modifier) {
                         Text("🔗 ", fontSize = 18.sp)
                         Text(
                             text = "Find more by\nme on Github",
+                            color = Color.Cyan,
+                            fontSize = 16.sp,
+                            textDecoration = TextDecoration.Underline,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+                    
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { uriHandler.openUri("https://www.youtube.com/@raptorbudhamusic") }
+                            .padding(8.dp)
+                    ) {
+                        Icon(
+                            painter = painterResource(id = R.drawable.ic_youtube),
+                            contentDescription = "YouTube",
+                            tint = Color.Unspecified,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Music by\nRaptorBudha",
                             color = Color.Cyan,
                             fontSize = 16.sp,
                             textDecoration = TextDecoration.Underline,
